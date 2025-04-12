@@ -1,0 +1,35 @@
+buildscript {
+    ext.kotlin_version = '1.8.22'
+
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://maven.juspay.in/jp-build-packages/hyper-sdk/" }
+    }
+
+    dependencies {
+        classpath 'com.android.tools.build:gradle:8.3.1'
+        classpath 'in.juspay:hypersdk.plugin:2.0.6'
+        classpath 'com.diffplug.spotless:spotless-plugin-gradle:6.22.0'
+        classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+    }
+}
+
+plugins {
+    alias(libs.plugins.android.application) apply false
+    alias(libs.plugins.kotlin.android) apply false
+}
+
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url 'https://jitpack.io' }
+        maven { url "https://maven.juspay.in/jp-build-packages/hyper-sdk/" }
+        maven { url "https://maven.getsimpl.com" }
+    }
+}
+
+task clean(type: Delete) {
+    delete rootProject.buildDir
+}

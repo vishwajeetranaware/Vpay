@@ -1,0 +1,22 @@
+// settings.gradle
+
+pluginManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://maven.juspay.in/jp-build-packages/hyper-sdk/" }
+        maven { url "https://maven.getsimpl.com" }
+    }
+}
+
+// To make sure it works for all subprojects as well:
+dependencyResolutionManagement {
+    repositories {
+        google()
+        mavenCentral()
+        maven { url "https://maven.juspay.in/jp-build-packages/hyper-sdk/" }
+        maven { url "https://maven.getsimpl.com" }
+    }
+}
+rootProject.name = "Vpay"
+include ':app'
