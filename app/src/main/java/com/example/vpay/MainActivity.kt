@@ -51,6 +51,8 @@ class MainActivity : AppCompatActivity() {
     private var isInitialized = false
     private var clientAuthToken: String? = null
     private val UPI_PAYMENT_REQUEST_CODE = 1001
+    private var isUPIIntentFlow = false
+    private var upiIntentData: String? = null
 
     override fun onStart() {
         super.onStart()
@@ -75,6 +77,7 @@ class MainActivity : AppCompatActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
         
+        progressBar = findViewById(R.id.progressBar)
         authSpinner = findViewById(R.id.authSpinner)
         val btnProcess: Button = findViewById(R.id.process)
         val btnUPIIntent: Button = findViewById(R.id.upiIntent)
@@ -82,6 +85,18 @@ class MainActivity : AppCompatActivity() {
         val adapter = ArrayAdapter(this, android.R.layout.simple_dropdown_item_1line, authTypes)
         authSpinner.setAdapter(adapter)
         authSpinner.setText(authTypes[0], false)
+
+        // Check for UPI Intent in incoming intent
+        if (intent?.action == Intent.ACTION_VIEW && intent?.data != null) {
+            val uri = intent.data
+            if (uri?.scheme == "upi" && uri?.host == "pay") {
+                isUPIIntentFlow = true
+                upiIntentData = uri.toString()
+                showProgressBar()
+                initializeSDK()
+                handleUPIIntent()
+            }
+        }
 
         authSpinner.setOnItemClickListener { _, _, position, _ ->
             val newAuthType = authTypes[position]
@@ -110,6 +125,7 @@ class MainActivity : AppCompatActivity() {
             if (!isInitialized) {
                 initializeSDK()
             }
+            showProgressBar()
             when (selectedAuthType) {
                 "RSA" -> callProcessRSA(initiatePayload)
                 "JWS" -> callProcessJWS(initiatePayload)
@@ -122,6 +138,7 @@ class MainActivity : AppCompatActivity() {
                             }
                             override fun onError(e: Exception) {
                                 Log.e("VPay", "Failed to fetch client auth token: ${e.message}")
+                                hideProgressBar()
                             }
                         })
                     } else {
@@ -135,7 +152,91 @@ class MainActivity : AppCompatActivity() {
             if (!isInitialized) {
                 initializeSDK()
             }
+            showProgressBar()
             callIncomingIntent()
+        }
+    }
+
+    private fun showProgressBar() {
+        runOnUiThread {
+            progressBar.visibility = View.VISIBLE
+        }
+    }
+
+    private fun hideProgressBar() {
+        runOnUiThread {
+            progressBar.visibility = View.GONE
+        }
+    }
+
+    private fun handleUPIIntent() {
+        if (upiIntentData != null) {
+            val processPayload = JSONObject()
+            val innerPayload = JSONObject()
+            val signaturePayload = JSONObject()
+
+            try {
+                innerPayload.put("action", "incomingIntent")
+                innerPayload.put("merchantKeyId", "35554")
+                innerPayload.put("clientId", "testhyperupi")
+                innerPayload.put("environment", "sandbox")
+                innerPayload.put("issuingPsp", "YES_BIZ")
+                innerPayload.put("intentData", upiIntentData)
+
+                when (selectedAuthType) {
+                    "CAT" -> {
+                        innerPayload.put("clientAuthToken", clientAuthToken)
+                        innerPayload.put("orderId", "hyper${System.currentTimeMillis()}")
+                    }
+                    "RSA" -> {
+                        signaturePayload.put("merchant_id", "hyperupi")
+                        signaturePayload.put("customer_id", "7385597780")
+                        signaturePayload.put("order_id", "hyper${System.currentTimeMillis()}")
+                        signaturePayload.put("timestamp", System.currentTimeMillis().toString())
+
+                        innerPayload.put("signature", getSignedData(signaturePayload.toString(), getPrivateKeyFromString(readPrivateStringRSA())))
+                        innerPayload.put("signaturePayload", signaturePayload.toString())
+                    }
+                    "JWS" -> {
+                        innerPayload.put("merchantId", "hyperupi")
+
+                        signaturePayload.put("merchantId", "HYPERUPITEST")
+                        signaturePayload.put("merchantChannelId", "HYPERUPITESTAPP")
+                        signaturePayload.put("customerMobileNumber", "917385597780")
+                        signaturePayload.put("merchantCustomerId", "7385597780")
+                        signaturePayload.put("merchantVpa", "hyperupitest@ypay")
+                        signaturePayload.put("merchantRequestId", "hyper${System.currentTimeMillis()}")
+                        signaturePayload.put("timestamp", System.currentTimeMillis().toString())
+
+                        val jwspayload = getJWSSignature(
+                            signaturePayload.toString(),
+                            readPrivateStringJWS(),
+                            "39e9c9e1-b9d4-3674-77cc-38c97ecd794b"
+                        ).split("\\.".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
+
+                        innerPayload.put("protected", jwspayload[0])
+                        innerPayload.put("signaturePayload", jwspayload[1])
+                        innerPayload.put("signature", jwspayload[2])
+                        innerPayload.put("enableJwsAuth", true)
+                    }
+                }
+
+                processPayload.put("requestId", UUID.randomUUID().toString())
+                processPayload.put("service", "in.juspay.ec")
+                processPayload.put("payload", innerPayload)
+
+                Log.d("VPay", "UPI Intent Payload: ${processPayload.toString()}")
+
+                if (hyperServicesHolder?.isInitialised == true) {
+                    hyperServicesHolder?.process(processPayload)
+                } else {
+                    Log.e("VPay", "HyperServicesHolder is not initialized! Cannot process UPI Intent.")
+                    hideProgressBar()
+                }
+            } catch (e: Exception) {
+                Log.e("VPay", "Error processing UPI Intent", e)
+                hideProgressBar()
+            }
         }
     }
 
@@ -371,7 +472,7 @@ class MainActivity : AppCompatActivity() {
             innerPayload.put("customer_id", "7385597780")
             innerPayload.put("order_id", "hyper${System.currentTimeMillis()}")
 
-            val orderId = innerPayload.getString("order_id")    
+            val orderId = innerPayload.getString("order_id")
 
             val sdkParams = JSONObject().apply {
                 put("showLoader", true)
@@ -444,11 +545,29 @@ class MainActivity : AppCompatActivity() {
                                 when (status) {
                                     "Pay_Success" -> {
                                         Log.d("VPay", "Payment successful")
+                                        hideProgressBar()
+                                        if (isUPIIntentFlow) {
+                                            setResult(RESULT_OK, Intent().apply {
+                                                putExtra("status", "success")
+                                                putExtra("message", "Payment successful")
+                                                putExtra("response", innerPayload.toString())
+                                            })
+                                            finish()
+                                        }
                                     }
                                     "Pay_Failure" -> {
                                         val errorCode = jsonObject.optString("errorCode")
                                         val errorMessage = jsonObject.optString("errorMessage")
                                         Log.e("VPay", "Payment failed: $errorCode - $errorMessage")
+                                        hideProgressBar()
+                                        if (isUPIIntentFlow) {
+                                            setResult(RESULT_CANCELED, Intent().apply {
+                                                putExtra("status", "failed")
+                                                putExtra("message", errorMessage)
+                                                putExtra("errorCode", errorCode)
+                                            })
+                                            finish()
+                                        }
                                     }
                                 }
                             }
@@ -464,6 +583,7 @@ class MainActivity : AppCompatActivity() {
                     }
                 } catch (e: Exception) {
                     Log.e("VPay", "Error in callback", e)
+                    hideProgressBar()
                 }
             }
         }
