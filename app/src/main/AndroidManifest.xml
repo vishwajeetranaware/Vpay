@@ -1,4 +1,3 @@
-<?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools">
 
@@ -12,15 +11,54 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Vpay"
         tools:targetApi="31">
+
+        <!-- Main Launcher -->
         <activity
             android:name=".MainActivity"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-        </activity>
-    </application>
 
+            <!-- If your deep link is handled in MainActivity, you can also include this here -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="upi" android:host="pay" android:pathPattern=".*" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="upi" android:host="mandate" android:pathPattern=".*" />
+            </intent-filter>
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="upiglobal" android:host="pay" android:pathPattern=".*" />
+            </intent-filter>
+        </activity>
+
+        <!-- OR if you're handling deeplink in a separate activity, declare it like this: -->
+        <!--
+        <activity
+            android:name=".YourDeepLinkHandlerActivity"
+            android:exported="true">
+
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="upi" android:host="pay" android:pathPattern=".*" />
+            </intent-filter>
+            ...
+        </activity>
+        -->
+
+    </application>
 </manifest>

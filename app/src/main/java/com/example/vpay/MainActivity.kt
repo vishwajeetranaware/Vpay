@@ -61,8 +61,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun initializeSDK() {
         if (hyperServicesHolder == null) {
-            hyperServicesHolder = HyperServiceHolder(this)
-            hyperServicesHolder!!.setCallback(createHyperPaymentsCallbackAdapter())
+        hyperServicesHolder = HyperServiceHolder(this)
+        hyperServicesHolder!!.setCallback(createHyperPaymentsCallbackAdapter())
             isInitialized = true
         }
     }
@@ -86,17 +86,7 @@ class MainActivity : AppCompatActivity() {
         authSpinner.setAdapter(adapter)
         authSpinner.setText(authTypes[0], false)
 
-        // Check for UPI Intent in incoming intent
-        if (intent?.action == Intent.ACTION_VIEW && intent?.data != null) {
-            val uri = intent.data
-            if (uri?.scheme == "upi" && uri?.host == "pay") {
-                isUPIIntentFlow = true
-                upiIntentData = uri.toString()
-                showProgressBar()
-                initializeSDK()
-                handleUPIIntent()
-            }
-        }
+        handleDeeplinkIntent(intent)
 
         authSpinner.setOnItemClickListener { _, _, position, _ ->
             val newAuthType = authTypes[position]
@@ -116,7 +106,7 @@ class MainActivity : AppCompatActivity() {
                     })
                 } else {
                     reinitializeSDK()
-                    initiatePaymentsSDK()
+            initiatePaymentsSDK()
                 }
             }
         }
@@ -169,76 +159,99 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun handleUPIIntent() {
-        if (upiIntentData != null) {
-            val processPayload = JSONObject()
-            val innerPayload = JSONObject()
-            val signaturePayload = JSONObject()
+    private fun handleDeeplinkIntent(intent: Intent) {
+        val data: Uri? = intent.data
+        if (data != null) {
+            Log.d("Vishwajeet (DEEPLINK)", "Host: ${data.host}")
+            Log.d("Vishwajeet (DEEPLINK)", "Path: ${data.path}")
+            Log.d("Vishwajeet (DEEPLINK)", "Query: ${data.query}")
+            Log.d("Vishwajeet (DEEPLINK)", "Full URI: $data")
 
-            try {
-                innerPayload.put("action", "incomingIntent")
-                innerPayload.put("merchantKeyId", "35554")
-                innerPayload.put("clientId", "testhyperupi")
-                innerPayload.put("environment", "sandbox")
-                innerPayload.put("issuingPsp", "YES_BIZ")
-                innerPayload.put("intentData", upiIntentData)
-
-                when (selectedAuthType) {
-                    "CAT" -> {
-                        innerPayload.put("clientAuthToken", clientAuthToken)
-                        innerPayload.put("orderId", "hyper${System.currentTimeMillis()}")
-                    }
-                    "RSA" -> {
-                        signaturePayload.put("merchant_id", "hyperupi")
-                        signaturePayload.put("customer_id", "7385597780")
-                        signaturePayload.put("order_id", "hyper${System.currentTimeMillis()}")
-                        signaturePayload.put("timestamp", System.currentTimeMillis().toString())
-
-                        innerPayload.put("signature", getSignedData(signaturePayload.toString(), getPrivateKeyFromString(readPrivateStringRSA())))
-                        innerPayload.put("signaturePayload", signaturePayload.toString())
-                    }
-                    "JWS" -> {
-                        innerPayload.put("merchantId", "hyperupi")
-
-                        signaturePayload.put("merchantId", "HYPERUPITEST")
-                        signaturePayload.put("merchantChannelId", "HYPERUPITESTAPP")
-                        signaturePayload.put("customerMobileNumber", "917385597780")
-                        signaturePayload.put("merchantCustomerId", "7385597780")
-                        signaturePayload.put("merchantVpa", "hyperupitest@ypay")
-                        signaturePayload.put("merchantRequestId", "hyper${System.currentTimeMillis()}")
-                        signaturePayload.put("timestamp", System.currentTimeMillis().toString())
-
-                        val jwspayload = getJWSSignature(
-                            signaturePayload.toString(),
-                            readPrivateStringJWS(),
-                            "39e9c9e1-b9d4-3674-77cc-38c97ecd794b"
-                        ).split("\\.".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
-
-                        innerPayload.put("protected", jwspayload[0])
-                        innerPayload.put("signaturePayload", jwspayload[1])
-                        innerPayload.put("signature", jwspayload[2])
-                        innerPayload.put("enableJwsAuth", true)
-                    }
-                }
-
-                processPayload.put("requestId", UUID.randomUUID().toString())
-                processPayload.put("service", "in.juspay.ec")
-                processPayload.put("payload", innerPayload)
-
-                Log.d("VPay", "UPI Intent Payload: ${processPayload.toString()}")
-
-                if (hyperServicesHolder?.isInitialised == true) {
-                    hyperServicesHolder?.process(processPayload)
-                } else {
-                    Log.e("VPay", "HyperServicesHolder is not initialized! Cannot process UPI Intent.")
-                    hideProgressBar()
-                }
-            } catch (e: Exception) {
-                Log.e("VPay", "Error processing UPI Intent", e)
-                hideProgressBar()
+            // Extract UPI Intent Data from the query parameters
+            val upiIntentData = data.getQueryParameter("upiIntentData")
+            if (upiIntentData != null) {
+                // Process the extracted UPI Intent Data
+                handleUPIIntent(upiIntentData)
+            } else {
+                Log.d("Vishwajeet (DEEPLINK)", "No UPI Intent data found in the URI.")
             }
+        } else {
+            Log.d("Vishwajeet (DEEPLINK)", "No data received in the intent.")
         }
     }
+
+    private fun handleUPIIntent(upiIntentData: String?) {
+    if (upiIntentData != null) {
+        val processPayload = JSONObject()
+        val innerPayload = JSONObject()
+        val signaturePayload = JSONObject()
+
+        try {
+            innerPayload.put("action", "incomingIntent")
+            innerPayload.put("merchantKeyId", "35554")
+            innerPayload.put("clientId", "testhyperupi")
+            innerPayload.put("environment", "sandbox")
+            innerPayload.put("issuingPsp", "YES_BIZ")
+            innerPayload.put("intentData", upiIntentData)
+
+            when (selectedAuthType) {
+                "CAT" -> {
+                    innerPayload.put("clientAuthToken", clientAuthToken)
+                    innerPayload.put("orderId", "hyper${System.currentTimeMillis()}")
+                }
+                "RSA" -> {
+                    signaturePayload.put("merchant_id", "hyperupi")
+                    signaturePayload.put("customer_id", "7385597780")
+                    signaturePayload.put("order_id", "hyper${System.currentTimeMillis()}")
+                    signaturePayload.put("timestamp", System.currentTimeMillis().toString())
+
+                    innerPayload.put("signature", getSignedData(signaturePayload.toString(), getPrivateKeyFromString(readPrivateStringRSA())))
+                    innerPayload.put("signaturePayload", signaturePayload.toString())
+                }
+                "JWS" -> {
+                    innerPayload.put("merchantId", "hyperupi")
+
+                    signaturePayload.put("merchantId", "HYPERUPITEST")
+                    signaturePayload.put("merchantChannelId", "HYPERUPITESTAPP")
+                    signaturePayload.put("customerMobileNumber", "917385597780")
+                    signaturePayload.put("merchantCustomerId", "7385597780")
+                    signaturePayload.put("merchantVpa", "hyperupitest@ypay")
+                    signaturePayload.put("merchantRequestId", "hyper${System.currentTimeMillis()}")
+                    signaturePayload.put("timestamp", System.currentTimeMillis().toString())
+
+                    val jwspayload = getJWSSignature(
+                        signaturePayload.toString(),
+                        readPrivateStringJWS(),
+                        "39e9c9e1-b9d4-3674-77cc-38c97ecd794b"
+                    ).split("\\.".toRegex()).dropLastWhile { it.isEmpty() }.toTypedArray()
+
+                    innerPayload.put("protected", jwspayload[0])
+                    innerPayload.put("signaturePayload", jwspayload[1])
+                    innerPayload.put("signature", jwspayload[2])
+                    innerPayload.put("enableJwsAuth", true)
+                }
+            }
+
+            processPayload.put("requestId", UUID.randomUUID().toString())
+            processPayload.put("service", "in.juspay.ec")
+            processPayload.put("payload", innerPayload)
+
+            Log.d("VPay", "UPI Intent Payload: $processPayload")
+
+            if (hyperServicesHolder?.isInitialised == true) {
+                hyperServicesHolder?.process(processPayload)
+            } else {
+                Log.e("VPay", "HyperServicesHolder is not initialized! Cannot process UPI Intent.")
+                hideProgressBar()
+            }
+        } catch (e: Exception) {
+            Log.e("VPay", "Error processing UPI Intent", e)
+            hideProgressBar()
+        }
+    } else {
+        Log.e("VPay", "UPI Intent Data is null")
+    }
+}
 
     private fun createInitiatePayloadRSA(): JSONObject {
         val sdkPayload = JSONObject()
